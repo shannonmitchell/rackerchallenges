@@ -1,0 +1,186 @@
+#!/usr/bin/env python
+
+import os
+import time
+import pyrax
+
+# Global Configuration: (Move to external config in production)
+region = "DFW"
+original_servername = "challenge2_orig"
+original_clonename = "challenge2_clone"
+original_imagename = "challenge2_image"
+server_flavor_label = '512MB Standard Instance'
+server_image_label = 'CentOS 6.3'
+
+
+# Get the flavor id from the label
+def get_flavor_id(csobj, flavor_label):
+
+  flavors = csobj.flavors.list()
+  flavor_id = ""
+  for flavor in flavors:
+    if flavor.name == flavor_label:
+      print "Found flavor with name of " + flavor_label
+      flavor_id = flavor.id
+  if flavor_id == "":
+    print "Flavor with name of " + flavor_label + " does not exist."
+    sys.exit(1)
+  return flavor_id
+
+
+# Get the image id from the label
+def get_image_id(csobj, image_label):
+
+  images = csobj.images.list()
+  image_id = ""
+  for image in images:
+    if image.name == image_label:
+      print "Found flavor with name of " + image_label
+      image_id = image.id
+  if image_id == "":
+    print "Found image with name of " + image_label
+    sys.exit(1)
+  return image_id
+
+
+# Create the instance
+def create_server(csobj, instance_name, flavor_id, image_id):
+
+  # Get the server list
+  servers = csobj.servers.list()
+  for server in servers:
+    if server.name == instance_name:
+      print "Server by the name of " + instance_name + " already exists."
+      return server
+
+  print "Creating new server by the name of " + instance_name
+  newserver = csobj.servers.create(instance_name, image_id, flavor_id)
+  return newserver
+
+
+# Wait for created servers to have ip info and return the populated data
+def wait_for_build_complete(csobj, check_server):
+
+  while 1:
+    curserver = csobj.servers.get(check_server.id)
+    if curserver.status == 'ACTIVE':
+      print "Server by the name of " + curserver.name + " is now ACTIVE"
+      return 0;
+    else:
+      print "Waiting for server by the name of " + curserver.name + " to finish building.  Sleeping 60 seconds."
+      time.sleep(60)
+
+
+# Create an image from the original server id
+def create_image_from_original(csobj, server_id, image_name):
+
+  # Check if an image by that name exists and return it
+  images = csobj.images.list()
+  for image in images:
+    if image.name == image_name:
+      print "Image by the name of " + image_name + " already exists.  Returning it instead of creating a new one"
+      return image
+
+  # If we got this far we still need to create the image
+  print "Creating new image by the name of " + image_name
+  csobj.servers.create_image(server_id, image_name)
+
+  # Get the new image id and return it
+  images = csobj.images.list()
+  new_image_id = ''
+  for image in images:
+    if image.name == image_name:
+      print "Returning new image by the name of " + image_name
+      return image
+
+
+def wait_for_active_image(csobj, image_id):
+
+  # Wait until the image status is active
+  while 1:
+    curimage = csobj.images.get(image_id)
+    if curimage.status == 'ACTIVE':
+      print "Image by the name of " + curimage.name + " is now ACTIVE"
+      return 0;
+    else:
+      print "Waiting for image by the name of " + curimage.name + " to finish saving.  Sleeping 60 seconds."
+      time.sleep(60)
+    
+
+  
+
+
+
+def  print_server_data(orig_server, orig_image, cloned_server):
+  print "\n\n"
+  print "###############################"
+  print "# Server Information"
+  print "###############################\n"
+
+  print "Original Server(%s): " % (orig_server.name)
+  print "\t%-10s %s " % ('cloud id:', orig_server.id)
+  print "\t%-10s %s " % ('ip addr:', orig_server.accessIPv4)
+  print "\t%-10s %s \n" % ('root pass:', orig_server.adminPass)
+
+  print "\nOriginal Image(%s): " % (orig_image.name)
+  print "\t%-10s %s \n" % ('cloud id:', orig_image.id)
+
+  print "\nCloned Server(%s): " % (cloned_server.name)
+  print "\t%-10s %s " % ('cloud id:', cloned_server.id)
+  print "\t%-10s %s " % ('ip addr:', cloned_server.accessIPv4)
+  print "\t%-10s %s \n" % ('root pass:', cloned_server.adminPass)
+
+
+
+
+
+
+# Main function.
+def main():
+
+  # Server Data Dictionary
+  server_data = dict()
+
+  # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
+  cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
+  print "Setting authentication file to %s" % (cred_file)
+  pyrax.set_credential_file(cred_file)
+
+  # Instantiate a cloudservers object
+  print "Instantiating cloudservers object"
+  csobj = pyrax.cloudservers
+
+  # Get the flavor id
+  flavor_id = get_flavor_id(csobj, server_flavor_label)
+
+  # Get the image id
+  image_id = get_image_id(csobj, server_image_label)
+
+  # Create the servers by server_count
+  orig_server = create_server(csobj, original_servername, flavor_id, image_id)
+
+  # Call function to wait on ip addresses to be assigned and update server_data
+  wait_for_build_complete(csobj, orig_server)
+
+
+  # Create an image of the original server
+  orig_image = create_image_from_original(csobj, orig_server.id, original_imagename)
+
+  # Wait for active image
+  wait_for_active_image(csobj, orig_image.id)
+
+  # Create a new server from the image just created
+  cloned_server = create_server(csobj, original_clonename, flavor_id, orig_image.id)
+
+  # Call function to wait on ip addresses to be assigned and update server_data
+  wait_for_build_complete(csobj, cloned_server)
+
+  # Print the data
+  print_server_data(orig_server, orig_image, cloned_server)
+
+
+
+# Called on execution. We are just going to call the main function from here.
+if __name__ == "__main__":
+  main()
+
