@@ -3,7 +3,9 @@ rackerchallenges
 
 ```
 
-# Challenge1 creates three webhead machines, waits for them to build and displays the information to the user.  No input required
+# Challenge1 creates three webhead machines, waits for them to 
+# build and displays the information to the user.  No input 
+# required
 
 example: ./challenge1
 
