@@ -1,0 +1,62 @@
+#!/usr/bin/env python
+
+import os
+import pyrax
+import argparse
+
+
+
+# Function to copy a directory into a cloud files container
+def push_directory_to_cloud_files(cfobj, directory, container):
+
+  # Check the directory
+  if not os.path.isdir(directory):
+    print "Directory: " + directory + " doesn't exist. exiting"
+    return 1
+
+  # Create the container if it doesn't exist(pyrax returns existing if exists)
+  print "Creating container: " + container
+  contobj = cfobj.create_container(container)
+
+  # Parse dir tree and start copying things over
+  for dirname, dirnames, filenames in os.walk(directory):
+    for filename in filenames:
+      bkfilename = os.path.join(dirname,filename)
+      if os.path.isfile(bkfilename):
+        print "Pushing: ", bkfilename + " to cloud files container " + container
+        chksum = pyrax.utils.get_checksum(bkfilename)
+        contobj.upload_file(bkfilename, bkfilename, etag=chksum)
+      else:
+        print "File: " + bkfilename + " removed. Skipping"
+
+
+
+# Main function
+def main():
+
+  # Parse the command line arguments
+  parser = argparse.ArgumentParser(description="Work with cloud files and directories", prog='challenge3')
+  parser.add_argument('--directory', help='directory to read/write from', required=True)
+  parser.add_argument('--container', help='cloud files container name', required=True)
+  args = parser.parse_args()
+
+
+  # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
+  cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
+  print "Setting authentication file to %s" % (cred_file)
+  pyrax.set_credential_file(cred_file)
+
+  # Instantiate a cloudservers object
+  print "Instantiating cloudfiles object"
+  cfobj = pyrax.cloudfiles
+
+
+  # Make a decision based on action
+  print "Running function to copy a directory into a cloud files container"
+  push_directory_to_cloud_files(cfobj, args.directory, args.container)
+
+
+
+# Called on execution. We are going to call the main() function
+if __name__ == "__main__":
+  main()
