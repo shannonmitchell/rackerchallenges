@@ -36,7 +36,7 @@ def main():
 
   # Parse the command line arguments
   parser = argparse.ArgumentParser(description="Work with cloud files and directories", prog='challenge3')
-  parser.add_argument('--directory', help='directory to read/write from', required=True)
+  parser.add_argument('--directory', help='directory to read from', required=True)
   parser.add_argument('--container', help='cloud files container name', required=True)
   args = parser.parse_args()
 
@@ -46,7 +46,7 @@ def main():
   print "Setting authentication file to %s" % (cred_file)
   pyrax.set_credential_file(cred_file)
 
-  # Instantiate a cloudservers object
+  # Instantiate a cloudfiles object
   print "Instantiating cloudfiles object"
   cfobj = pyrax.cloudfiles
 
