@@ -1,0 +1,107 @@
+#!/usr/bin/env python
+
+import os
+import pyrax
+import argparse
+
+
+
+
+# Main function
+def main():
+
+  # Globals(usually want to get this through config or user input)
+  db_flavor = 'm1.liny'
+  db_volume_size = 1
+  db_instance_name = 'challenge5_instance'
+  db_database_name = 'challenge5_db'
+  db_database_user = 'challenge5_user'
+  db_database_pass = 'challenge5_pass'
+
+  # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
+  cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
+  print "Setting authentication file to %s" % (cred_file)
+  pyrax.set_credential_file(cred_file)
+
+  # Instantiate a clouddns object
+  print "Instantiating cloud_dns object"
+  cdbobj = pyrax.cloud_databases
+
+
+  # Check that the instance doesn't already exist and use it if it does
+  instances = cdbobj.list()
+  inst_exists = 0
+  instobj = 0
+  for instance in instances:
+    if instance.name == db_instance_name:
+      print "Instance " + instance.name + " already esists. "
+      instobj = instance
+      inst_exists = 1
+
+  # Create a new instance if needed.
+  if inst_exists == 1:
+    print "Using existing instance"
+  else:
+    # Create the instance
+    print "Creating instance by the name of " + db_instance_name
+    instobj = cdbobj.create(db_instance_name, db_flavor, volume=db_volume_size)
+
+
+
+  # Check the database doesn't exist and use it if it does
+  databases = instobj.list_databases()
+  db_exists = 0
+  dbobj = 0
+  for database in databases:
+    if database.name == db_database_name:
+      print "Database " + database.name + " already exists. "
+      dbobj = database
+      db_exists = 1
+
+
+  # Create a new database if needed
+  if db_exists == 1:
+    print "Using existing database"
+  else:
+    # Create the database
+    print "Creating database with the name of " + db_database_name
+    dbobj = instobj.create_database(db_database_name)
+
+
+
+  # Check the user doesn't exist and use it if it does
+  users = instobj.list_users()
+  user_exists = 0
+  userobj = 0
+  for user in users:
+    if user.name == db_database_user:
+      print "User " + user.name + " already exists. "
+      userobj = user
+      user_exists = 1
+
+
+  # Create a new user if needed
+  if user_exists != 1:
+    # Create the user
+    print "Creating user with the name of " + db_database_user
+    dbobj = instobj.create_user(name=db_database_user, password=db_database_pass, database_names=[dbobj.name])
+
+
+
+  # Print the information
+  print "\n## New Instance and DB Info ##"
+  print "Instance Name: " + instobj.name
+  print "Instance Host: " + instobj.hostname
+  print "Database Name: " + dbobj.name
+  print "Database User: " + userobj.name
+  print "Database Pass: " + db_database_pass
+  print "\n"
+  print "Example Conn String: \n"
+  print "\tmysql -u " + userobj.name + " -p -h " + instobj.hostname + " " + dbobj.name
+
+
+
+
+# Called on execution. We are going to call the main() function
+if __name__ == "__main__":
+  main()
