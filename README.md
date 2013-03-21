@@ -1,7 +1,7 @@
 rackerchallenges
 ================
 
-<code>
+```
 
 # Challenge1 creates three webhead machines, waits for them to build and displays the information to the user.  No input required
 
@@ -67,4 +67,5 @@ example: ./challenge4 --fqdn test.linuxrackers.com --ip 10.10.10.33
 exampe: ./challenge5
 
 
-</code>
+
+```
