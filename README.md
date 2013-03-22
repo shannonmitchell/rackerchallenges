@@ -66,7 +66,16 @@ example: ./challenge4 --fqdn test.linuxrackers.com --ip 10.10.10.33
 # Challenge5 creates a dbinstance, db and db user from variable 
 # information in some global variables.  No input required.
 
-exampe: ./challenge5
+example: ./challenge5
+
+
+
+
+# Challenge6 creates a container called challenge6, enables cdn and
+# prints the results.  No input required.
+
+example: ./challenge6
+
 
 
 

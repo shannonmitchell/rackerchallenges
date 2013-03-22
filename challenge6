@@ -1,0 +1,53 @@
+#!/usr/bin/env python
+
+import os
+import pyrax
+import argparse
+
+
+
+# Main function
+def main():
+
+  # Container name
+  container_name = 'challenge6'
+
+  # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
+  cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
+  print "Setting authentication file to %s" % (cred_file)
+  pyrax.set_credential_file(cred_file)
+
+  # Instantiate a cloudfiles object
+  print "Instantiating cloudfiles object"
+  cfobj = pyrax.cloudfiles
+
+  # Create the container called 'challenge6'i it doesn't exist
+  # pyrax returns existing if exists
+  print "Creating container: " + container_name
+  contobj = cfobj.create_container(container_name)
+
+
+  # CDN enable it.
+  if contobj.cdn_enabled == True:
+    print "Container " + container_name + " already public. Skipping"
+  else:
+    print "Making continer " + container_name + " public."
+    contobj.make_public(ttl=900)
+
+  # Pull updated information 
+  print "Getting updated information for continer " + container_name
+  contobj = cfobj.get_container(container_name)
+
+  # Print some info about it
+  print "######################"
+  print "# Container Info:"
+  print "######################"
+  print "\n\tPublic URL: %s\n" % (contobj.cdn_uri)
+  print "\tSecure Public URL: %s\n" % (contobj.cdn_ssl_uri)
+  print "\tStreaming URL: %s\n" % (contobj.cdn_streaming_uri)
+
+
+
+# Called on execution. We are going to call the main() function
+if __name__ == "__main__":
+  main()
