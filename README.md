@@ -79,4 +79,12 @@ example: ./challenge6
 
 
 
+
+# Challenge7 creates 2 webhead nodes and sets up a load balancer on port 80 for
+# both.
+
+example: ./challenge7
+
+
 ```
+
