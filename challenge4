@@ -11,7 +11,7 @@ import argparse
 def main():
 
   # Parse the command line arguments
-  parser = argparse.ArgumentParser(description="Work with cloud files and directories", prog='challenge3')
+  parser = argparse.ArgumentParser(description="Work with cloud files and directories", prog='challenge4')
   parser.add_argument('--fqdn', help='fully qualified domain name', required=True)
   parser.add_argument('--ip', help='ip address', required=True)
   args = parser.parse_args()
@@ -27,7 +27,7 @@ def main():
   cdnsobj = pyrax.cloud_dns
 
 
-  # Make a decision based on action
+  # Add the domain record
   domains = cdnsobj.list()
   for domain in domains:
     if args.fqdn.endswith(domain.name):

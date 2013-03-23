@@ -1,0 +1,88 @@
+#!/usr/bin/env python
+
+import os
+import pyrax
+import argparse
+
+
+
+# Main function
+def main():
+
+  # Container name
+  container_name = 'challenge8'
+
+  # Parse the command line arguments
+  parser = argparse.ArgumentParser(description="Create a pre-defined index.html file in a public cdn and cname a user provided fqdn to it.", prog='challenge8')
+  parser.add_argument('--fqdn', help='fully qualified domain name', required=True)
+  args = parser.parse_args()
+
+  # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
+  cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
+  print "Setting authentication file to %s" % (cred_file)
+  pyrax.set_credential_file(cred_file)
+
+  # Instantiate a cloudfiles object
+  print "Instantiating cloudfiles object"
+  cfobj = pyrax.cloudfiles
+
+  # Create the container called 'challenge8' if it doesn't exist
+  # pyrax returns existing if exists
+  print "Creating container: " + container_name
+  contobj = cfobj.create_container(container_name)
+
+
+  # CDN enable it.
+  if contobj.cdn_enabled == True:
+    print "Container " + container_name + " already public. Skipping"
+  else:
+    print "Making continer " + container_name + " public."
+    contobj.make_public(ttl=900)
+
+  # Pull updated information 
+  print "Getting updated information for continer " + container_name
+  contobj = cfobj.get_container(container_name)
+
+  # Create a simple index.html file and upload it
+  content = "challenge8 index file contents"
+  print "Creating index.html file with content: \"" + content + "\" and content_type of text/html"
+  index_obj = contobj.store_object("index.html", content, content_type='text/html')
+
+  # Change the metadata on the container to set an index file
+  metadata = {'X-Container-Meta-Web-Index': 'index.html'}
+  cfobj.set_container_metadata(contobj, metadata)
+
+
+  # Instantiate a clouddns object
+  print "Instantiating cloud_dns object"
+  cdnsobj = pyrax.cloud_dns
+
+  # Add the domain cname
+  domains = cdnsobj.list()
+  for domain in domains:
+    if args.fqdn.endswith(domain.name):
+      print "Found a matching domain: " + domain.name + " for fqdn: " + args.fqdn
+      cdndomain = contobj.cdn_uri.replace('http://','')
+      recs = [{'type': 'CNAME', 'name': args.fqdn, 'data':cdndomain, 'ttl':6000}]
+      print "Adding record: \n\t" + args.fqdn + "   IN  CNAME  " + cdndomain
+      cdnsobj.add_records(domain, recs)
+
+
+
+
+  # Print some info about it
+  print "\n\n######################"
+  print "# Container Info:"
+  print "######################"
+  print "\n\tPublic URL: %s\n" % (contobj.cdn_uri)
+  print "\tSecure Public URL: %s\n" % (contobj.cdn_ssl_uri)
+  print "\tStreaming URL: %s\n" % (contobj.cdn_streaming_uri)
+  print "\tMetadata: %s\n" % (cfobj.get_container_metadata(contobj))
+  print "\tCNAME: %s => %s\n" % (args.fqdn, cdndomain)
+  print "\tindex.html content: \"%s\"\n" % (content)
+
+
+
+# Called on execution. We are going to call the main() function
+if __name__ == "__main__":
+  main()

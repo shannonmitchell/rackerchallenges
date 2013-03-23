@@ -86,5 +86,27 @@ example: ./challenge6
 example: ./challenge7
 
 
+
+
+# Challenge8 creates a cdn enabled container and uploads an index.html object
+# to it.  It also sets the metadata for an index file and creates a cname
+# in dns for it.  The challenge doesn't give a domain name to use, so we need
+# user input for it.
+#
+# ./challenge8 -h
+# usage: challenge8 [-h] --fqdn FQDN
+#
+# Create a pre-defined index.html file in a public cdn and cname a 
+# user provided fqdn to it.
+# 
+# optional arguments:
+#   -h, --help   show this help message and exit
+#   --fqdn FQDN  fully qualified domain name
+
+example: ./challenge8 --fqdn challenge8.linuxrackers.com
+
+
+
+
 ```
 
