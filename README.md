@@ -107,6 +107,27 @@ example: ./challenge8 --fqdn challenge8.linuxrackers.com
 
 
 
+# Challenge 9 creates a server with a dns entry based on a given fqdn, image id
+# or name and flavor id or name.  
+#
+# ./challenge9 -h
+#
+# usage: challenge9 [-h] --fqdn FQDN --image IMAGE --flavor FLAVOR
+#
+# Create a server based on fqdn, flavor id or name and image id or name.
+#
+# optional arguments:
+#   -h, --help       show this help message and exit
+#   --fqdn FQDN      fully qualified domain name
+#   --image IMAGE    image id or name
+#   --flavor FLAVOR  flavor id or name
+
+example:  ./challenge9 --fqdn test.linuxrackers.com --flavor 2 --image 03318d19-b6e6-4092-9b5c-4758ee0ada60
+
+or 
+
+example: ./challenge9 --fqdn test.linuxrackers.com --flavor "512MB Standard Instance" --image "CentOS 5.6"
+
 
 ```
 

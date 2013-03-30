@@ -1,0 +1,167 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import time
+import pyrax
+import argparse
+
+
+# Create a function to take care of the dns record creation
+def create_server_dns(cdnsobj, fqdn, ip_address):
+
+  # Add the domain record
+  domains = cdnsobj.list()
+  for domain in domains:
+    if fqdn.endswith(domain.name):
+      print "Found a matching domain: " + domain.name + " for fqdn: " + fqdn
+      recs = [{'type': 'A', 'name': fqdn, 'data':ip_address, 'ttl':6000}]
+      print "Adding record: \n\t" + fqdn + "   IN  A  " + ip_address
+      cdnsobj.add_records(domain, recs)
+
+# Check for an existing domain
+def check_server_dns(cdnsobj, fqdn):
+
+  # Add the domain record
+  domains = cdnsobj.list()
+  found_domain = 0
+  for domain in domains:
+    if fqdn.endswith(domain.name):
+      found_domain = 1
+
+  # Bounce if the domain doesn't exist
+  if found_domain != 1:
+    print "Domain for FQDN of " + fqdn + " doesn't exist for this account."
+    sys.exit(1)
+
+
+# Get the flavor id from the name
+def get_flavor_from_id_or_name(csobj, given_flavor_value):
+
+  flavors = csobj.flavors.list()
+  flavor_id = ""
+  for flavor in flavors:
+    if flavor.id == given_flavor_value or flavor.name == given_flavor_value:
+      print "Found flavor with name of \"" + flavor.name + "\""
+      flavor_id = flavor.id
+  if flavor_id == "":
+    print "\nFlavor with name or id of " + given_flavor_value + " does not exist. Please use a flavor id or name from the following available values:\n"
+    for flavor in flavors:
+      print "id: %s  =>  name: \"%s\"" % (flavor.id, flavor.name)
+    sys.exit(1)
+  return flavor_id
+
+
+# Get the image id from the name
+def get_image_from_id_or_name(csobj, given_image_value):
+
+  images = csobj.images.list()
+  image_id = ""
+  for image in images:
+    if image.id == given_image_value or image.name == given_image_value:
+      print "Found image with name of \"" + image.name + "\""
+      image_id = image.id
+  if image_id == "":
+    print "\nImage with name or id of " + given_image_value + " does not exist. Please use a image id or name from the following available values:\n"
+    for image in images:
+      print "id: %s  =>  name: \"%s\"" % (image.id, image.name)
+    sys.exit(1)
+  return image_id
+
+
+
+# Create the instance
+def create_server(csobj, instance_name, flavor_id, image_id):
+
+  # Get the server list
+  servers = csobj.servers.list()
+  for server in servers:
+    if server.name == instance_name:
+      print "Server by the name of " + instance_name + " already exists."
+      return server
+
+  print "Creating new server by the name of " + instance_name
+  newserver = csobj.servers.create(instance_name, image_id, flavor_id)
+  return newserver
+
+
+def wait_for_public_ip(csobj, server_id):
+
+  while 1:
+    curserver = csobj.servers.get(server_id)
+    if curserver.accessIPv4:
+      print "Found access ip: " + curserver.accessIPv4
+      return curserver.accessIPv4
+    else:
+      print "Waiting for public IP to be assigned. Sleeping 60 seconds."
+      time.sleep(60)
+
+
+def print_server_data(serverobj, curip, curpass):
+  print "\n\n"
+  print "###############################"
+  print "# New Server Information"
+  print "###############################\n"
+  print "%s(server name and dns entry): " % (serverobj.name)
+  print "\t%-10s %s " % ('server id:', serverobj.id)
+  print "\t%-10s %s " % ('ip addr:', curip)
+  print "\t%-10s %s \n" % ('root pass:', curpass)
+  print "\n"
+  print "Once the server build is complete, you should be able to get in using the dns entry:  ssh root@" + serverobj.name
+
+
+
+
+# Main function
+def main():
+
+  # Parse the command line arguments
+  parser = argparse.ArgumentParser(description="Create a server based on fqdn, flavor id or name and image id or name.", prog='challenge9')
+  parser.add_argument('--fqdn', help='fully qualified domain name', required=True)
+  parser.add_argument('--image', help='image id or name', required=True)
+  parser.add_argument('--flavor', help='flavor id or name', required=True)
+  args = parser.parse_args()
+
+
+  # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
+  cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
+  print "Setting authentication file to %s" % (cred_file)
+  pyrax.set_credential_file(cred_file)
+
+  # Instantiate a clouddns object
+  print "Instantiating cloud_dns object"
+  cdnsobj = pyrax.cloud_dns
+
+  # Instantiate a cloudservers object
+  print "Instantiating cloudservers object"
+  csobj = pyrax.cloudservers
+
+  # Get the flavor id
+  flavor_id = get_flavor_from_id_or_name(csobj, args.flavor)
+
+  # Get the image id
+  image_id = get_image_from_id_or_name(csobj, args.image)
+
+  # Lets check the domain existance for the fqdn before going on 
+  check_server_dns(cdnsobj, args.fqdn)
+
+
+  # Create the servers by server_count
+  new_server = create_server(csobj, args.fqdn, flavor_id, image_id)
+  admin_pass = new_server.adminPass
+
+  # Call function to wait on ip addresses to be assigned
+  public_ip_address = wait_for_public_ip(csobj, new_server.id)
+
+  # Create a DNS entry for the server
+  create_server_dns(cdnsobj, args.fqdn, public_ip_address)
+
+  # Print out the results
+  print_server_data(new_server, public_ip_address, admin_pass)
+
+
+
+
+# Called on execution. We are going to call the main() function
+if __name__ == "__main__":
+  main()
