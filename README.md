@@ -171,7 +171,7 @@ example: ./challenge9 --fqdn test.linuxrackers.com --flavor "512MB Standard Inst
 # Before running you will want to create a file with the custom error page content and run
 # ssh-keygen to produce the needed keyfiles
 
-example: ./challenge10 --fqdn test4.linuxrackers.com --public_keyfile /root/.ssh/id_rsa.pub --error_file
+example: ./challenge10 --fqdn test4.linuxrackers.com --public_keyfile /root/.ssh/id_rsa.pub --error_file /tmp/error_file
 
 or 
 
