@@ -36,10 +36,10 @@ def get_image_id(csobj, image_label):
   image_id = ""
   for image in images:
     if image.name == image_label:
-      print "Found flavor with name of " + image_label
+      print "Found image with name of " + image_label
       image_id = image.id
   if image_id == "":
-    print "Found image with name of " + image_label
+    print "Image with name of " + image_label + " does not exist"
     sys.exit(1)
   return image_id
 

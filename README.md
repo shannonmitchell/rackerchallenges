@@ -47,7 +47,7 @@ example: ./challenge3 --directory /etc --container test_container
 # Challenge4 just takes a fqdn and ip address and creates the record 
 #
 # ./challenge4 -h
-# usage: challenge3 [-h] --fqdn FQDN --ip IP
+# usage: challenge4 [-h] --fqdn FQDN --ip IP
 #
 # Work with cloud files and directories
 #

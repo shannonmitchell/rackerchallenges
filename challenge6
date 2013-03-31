@@ -10,7 +10,7 @@ import argparse
 def main():
 
   # Container name
-  container_name = 'challenge6'
+  container_name = 'challenge6_container'
 
   # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
   cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
