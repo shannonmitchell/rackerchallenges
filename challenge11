@@ -1,0 +1,517 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import time
+import pyrax
+import argparse
+
+
+
+def create_webhead_network(cnwobj, label, cidr):
+
+  # Get the network list
+  networks = cnwobj.list()
+
+  # Check that it doesn't already exist
+  net_id = ''
+  for network in networks:
+    if network.label == label:
+      # Make sure the subnet matches if it exists
+      if network.cidr != cidr:
+        print "Network by label (" + label + ") exists, and cidr(" + cidr + ") does not match the one in the configuration provided" 
+        sys.exit(1)
+      else:
+        print "Network by label (" + label + ") already exists, and cidr(" + cidr + ") matches.  Using it instead of creating a new one"
+        return network.id
+
+  # Create the network
+  print "Creating network with label " + label + " and cidr of " + cidr
+  #network_ret = cnwobj.create(cidr=cidr, label=label)
+  network_ret = cnwobj.create(label, cidr=cidr)
+  return network_ret.id
+
+
+# Create a function to take care of the dns record creation
+def create_vip_dns(cdnsobj, fqdn, ip_address):
+
+  # Add the domain record
+  domains = cdnsobj.list()
+  for domain in domains:
+    if fqdn.endswith(domain.name):
+      print "Found a matching domain: " + domain.name + " for fqdn: " + fqdn
+      recs = [{'type': 'A', 'name': fqdn, 'data':ip_address, 'ttl':6000}]
+
+      # Check if the record already exists and return it instead
+      records = domain.list_records()
+      for record in records:
+        if record.name == fqdn and record.data == ip_address:
+          print "Record already exists. Skipping"
+          return 0
+    
+      # Add record if we made it this far and return from function
+      print "Adding record: \n\t" + fqdn + "   IN  A  " + ip_address
+      cdnsobj.add_records(domain, recs)
+      return 0
+
+# Check for an existing domain
+def check_vip_dns(cdnsobj, fqdn):
+
+  # Add the domain record
+  domains = cdnsobj.list()
+  found_domain = 0
+  for domain in domains:
+    if fqdn.endswith(domain.name):
+      found_domain = 1
+
+  # Bounce if the domain doesn't exist
+  if found_domain != 1:
+    print "Domain for FQDN of " + fqdn + " doesn't exist for this account."
+    sys.exit(1)
+
+
+# Get the flavor id from the name
+def get_flavor_from_id_or_name(csobj, given_flavor_value):
+
+  flavors = csobj.flavors.list()
+  flavor_id = ""
+  for flavor in flavors:
+    if flavor.id == given_flavor_value or flavor.name == given_flavor_value:
+      print "Found flavor with name of \"" + flavor.name + "\""
+      flavor_id = flavor.id
+  if flavor_id == "":
+    print "\nFlavor with name or id of " + given_flavor_value + " does not exist. Please use a flavor id or name from the following available values:\n"
+    for flavor in flavors:
+      print "id: %s  =>  name: \"%s\"" % (flavor.id, flavor.name)
+    sys.exit(1)
+  return flavor_id
+
+
+# Get the image id from the name
+def get_image_from_id_or_name(csobj, given_image_value):
+
+  images = csobj.images.list()
+  image_id = ""
+  for image in images:
+    if image.id == given_image_value or image.name == given_image_value:
+      print "Found image with name of \"" + image.name + "\""
+      image_id = image.id
+  if image_id == "":
+    print "\nImage with name or id of " + given_image_value + " does not exist. Please use a image id or name from the following available values:\n"
+    for image in images:
+      print "id: %s  =>  name: \"%s\"" % (image.id, image.name)
+    sys.exit(1)
+  return image_id
+
+
+# Check the public key file and return the dictionary for server creation
+def check_pub_key_file(given_filename):
+
+  if os.path.isfile(given_filename):
+    print "Public Key File " + given_filename + " exists."
+    try:
+      pkfile = open(given_filename, 'r')
+      content = pkfile.read()
+      retfiles = {"/root/.ssh/authorized_keys": content}
+      return retfiles
+    except IOError as e:
+      print "Sorry, but we had trouble opening file " + given_filename + ". exiting"
+      print("({})".format(e))
+      sys.exit(1)
+  else:
+    print "Public key file " + given_filename + " does exist. Please create using a ssh-keygen and run again."
+
+
+# Check for the error page file and return the contents
+def check_error_page_file(given_filename):
+
+  if os.path.isfile(given_filename):
+    print "Provided error content file " + given_filename + " exists."
+    try:
+      errorfile = open(given_filename, 'r')
+      content = errorfile.read()
+      return content
+    except IOError as e:
+      print "Sorry, but we had trouble opening file " + given_filename + ". exiting"
+      print("({})".format(e))
+      sys.exit(1)
+  else:
+    print "Error page file " + given_filename + " does exist. Please create run again."
+
+
+# Create the instance
+def create_webhead(csobj, instance_name, flavor_id, image_id, files_dict, network_id):
+
+  # Get the server list
+  servers = csobj.servers.list()
+  for server in servers:
+    if server.name == instance_name:
+      print "Server by the name of " + instance_name + " already exists."
+      return server
+
+  print "Creating new server by the name of " + instance_name
+  nic_list = [{'net-id':'00000000-0000-0000-0000-000000000000'},{'net-id':'11111111-1111-1111-1111-111111111111'},{'net-id':network_id}]
+
+  newserver = csobj.servers.create(instance_name, image_id, flavor_id, files=files_dict, nics=nic_list)
+  return newserver
+
+
+# Wait for created servers to be active then return the populated data
+def wait_and_update(csobj, server_data):
+
+  # Keep looping till we have them all
+  completed = 0
+  while 1:
+
+    # reset completed for the next round of checks
+    completed = 1
+
+    # Loop through the server data, update ip address and check status.
+    for server_name, server_info in server_data.iteritems():
+ 
+      # pull the current server info
+      curserver = csobj.servers.get(server_info['id'])
+
+      # Set ip address if not already
+      if server_info['ipaddr'] == '0':
+        if curserver.accessIPv4:
+          print "Found access ip: " + curserver.accessIPv4
+          server_data[server_name]['ipaddr'] =  curserver.accessIPv4
+
+      # If not active, set completed to 0
+      if curserver.status != 'ACTIVE':
+        completed = 0
+
+    # return if things are finished, else sleep until ready
+    if completed == 1:
+      return server_data
+    else:
+      print "Waiting for servers to be available. Sleeping 60 seconds."
+      time.sleep(60)
+
+
+
+def create_and_attach_cbs_volumes(cbsobj, cur_server_data, storage_size, storage_type):
+
+  # Run through the servers and create storage for each
+  for server_name, server_info in cur_server_data.iteritems():
+    cur_cbs_volname = server_name + "_v01"
+    cbs_volumes = cbsobj.list()
+    found_volume = 0
+    for cbs_volume in cbs_volumes:
+      if cbs_volume.name == cur_cbs_volname:
+        print "Volume by the name of " + cbs_volume.name + " exists.  Skipping creation"
+        found_volume = 1
+
+    if found_volume == 0:
+      print "Creating cloud block storage for server " + server_name + " with a size of " + str(storage_size) + " and type of " + storage_type
+      cbsobj.create(name=cur_cbs_volname, size=storage_size, volume_type=storage_type)
+
+
+  # Loop through and wait for the storage to finish
+  completed = 0
+  while 1:
+
+    # reset completed for the next round of checks
+    completed = 1
+
+    # Loop the servers and check the stats of it associated cbs volumes
+    for server_name, server_info in cur_server_data.iteritems():
+      cur_cbs_volname = server_name + "_v01"
+
+      # get the associated volume(why is there not a get function?)
+      cbs_volumes = cbsobj.list()
+      for cbs_volume in cbs_volumes:
+        if cbs_volume.name == cur_cbs_volname:
+          if cbs_volume.status == 'available' or cbs_volume.status == 'in-use':
+            print "Volume " + cur_cbs_volname + " status is " + cbs_volume.status
+            if len(cbs_volume.attachments) == 0: 
+              print "Attaching volume " + cur_cbs_volname + " to server " + server_name
+              cbs_volume.attach_to_instance(server_info['id'], mountpoint="")
+            else:
+              print "Volume " + cur_cbs_volname + " already attached to server " + server_name + ". Doing nothing this round."
+          else:
+            print "Volume " + cur_cbs_volname + " status is " + cbs_volume.status + ". Not ready yet"
+            completed = 0
+ 
+    
+    # return if things are finished, else sleep until ready
+    if completed == 1:
+      print "All volumes created and attached. Returning"
+      return
+    else:
+      print "Waiting for volumes to finish. Sleeping 60 seconds."
+      time.sleep(30)
+
+
+
+# Create nodes for the load balancer
+def create_lb_nodes(clbobj, csobj, final_server_data):
+  return_nodes = []
+  for server_name, server_info in final_server_data.iteritems():
+    cursrv = csobj.servers.get(server_info['id'])
+    print "Creating lb node for server " + server_name + " on port 80"
+    curnode = clbobj.Node(address=cursrv.networks['private'][0], port=80, condition="ENABLED")
+    return_nodes.append(curnode)
+
+  print "Returning node list"
+  return return_nodes
+    
+    
+
+# Create the load balancer
+def create_lb(clbobj, nodes, loadbalancer_name):
+ 
+  load_balancers = clbobj.list()
+  for load_balancer in load_balancers:
+    if load_balancer.name == loadbalancer_name:
+      print "Found load balancer by the name of " + loadbalancer_name + ". Skipping creation"
+      return load_balancer
+
+    
+  # Create the load balancer for port 80 to the 2 web nodes
+  print "Creating an HTTP/80 load balancer called " + loadbalancer_name
+  load_balancer_vip = clbobj.VirtualIP(type="PUBLIC")
+  load_balancer = clbobj.create(loadbalancer_name, port=80, protocol="HTTP", nodes=nodes, virtual_ips=[load_balancer_vip])
+
+  return load_balancer
+
+
+def wait_for_lb(clbobj, load_balancer):
+  while 1:
+    curlb = clbobj.get(load_balancer.id)
+    if curlb.status == 'ACTIVE':
+      print "Load Balancer by the name of " + load_balancer.name + " is active. Done waiting"
+      # There seems to be a but in the get function to where all data isn't pulled
+      # Pulling from listing instead.
+      load_balancers = clbobj.list()
+      for cur_lb in load_balancers:
+        if cur_lb.name == load_balancer.name:
+          return cur_lb
+    else:
+      print "Load Balancer by the name of " + load_balancer.name + " is in state: " + load_balancer.status + ".  Waiting 10 seconds"
+      time.sleep(10)
+
+
+# For the challenge, we are just going to use a container of 'container10' and an object
+# named lb_errorpage
+def save_error_page(cfobj, errorpage_content):
+
+
+  # Check for existing and let the user know if we are creating one or using an existing
+  containers = cfobj.list_containers()
+  found_container = 0
+  for container in containers:
+    print container
+    if container == 'challenge11':
+      print "Found existing container: challenge11"
+      found_container = 1
+  if not found_container:
+    print "Creating container: challenge11"
+
+  # adding and or returning existing container
+  contobj = cfobj.create_container("challenge11")
+
+  # Look for and existing error page document
+  cont_objects = contobj.get_objects()
+  for cont_object in cont_objects:
+    if cont_object.name == 'errorpage':
+      print "Object of name " + cont_object.name + " already exists. Using it."
+      if cont_object.get() == errorpage_content:
+        print "Object content in cloud files for error page is up to date.  Nothing to do here"
+        return 0
+      else:
+        print "Content doesn't match. Updateing content for the error page in cloud files."
+        contobj.store_object('errorpage', errorpage_content)
+        return 0
+        
+
+  # Page doesn't exist so lets create it
+  print "Creating errorpage cloud files object and saving content to it"
+  contobj.store_object('errorpage', errorpage_content)
+  
+
+  
+
+
+def print_server_data(final_server_data, lbobj, vip_fqdn):
+  print "\n\n"
+  print "###############################"
+  print "# New LB/Webhead Information"
+  print "###############################\n"
+  for server_name, server_info in sorted(final_server_data.iteritems()):
+    print "%s: " % (server_name)
+    print "\t%-10s %s " % ('cloud id:', server_info['id'])
+    print "\t%-10s %s " % ('ip addr:', server_info['ipaddr'])
+    print "\t%-10s %s \n" % ('root pass:', server_info['password'])
+
+  print "Load Balancer Name: %s" % (lbobj.name)
+  print "\tLoad Balancer port: %s" % (lbobj.port) 
+  print "\tLoad Balancer node count: %s" % (lbobj.nodeCount) 
+  print "\tLoad Balancer protocol: %s" % (lbobj.protocol) 
+  print "\tLoad Balancer public vip ip: %s" % (lbobj.virtual_ips[0].address) 
+  print "\tLoad Balancer public vip fqdn: %s" % (vip_fqdn) 
+
+
+def activate_webservice(server_data):
+
+
+  for server_name, server_info in sorted(server_data.iteritems()):
+    commands = "\"egrep -i -e '(redhat|centos)' /etc/redhat-release; if [ $? == 0 ]; then /usr/bin/yum -y install httpd > /dev/null; /sbin/chkconfig httpd on; /sbin/service httpd start > /dev/null; /sbin/iptables -I INPUT 4 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT; /sbin/iptables -I INPUT 4 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT; /sbin/service iptables save; fi; echo " + server_name + " > /var/www/html/index.html\""
+    print "Enabling httpd on server " + server_name
+    os.system("ssh -o StrictHostKeyChecking=no root@" + server_info['ipaddr'] + " " + commands + " > /dev/null 2>&1")
+
+
+
+
+# Main function.
+def main():
+
+  # Parse the command line arguments
+  parser = argparse.ArgumentParser(description="Create load balanced webheads withuser supplied fqdn and public key for ssh logins.", prog='challenge11')
+  parser.add_argument('--image', help='image id or name (default: CentOS 6.3)', default='CentOS 6.3')
+  parser.add_argument('--flavor', help='flavor id or name (default: 512MB Standard Instance)', default='512MB Standard Instance')
+  parser.add_argument('--region', help='Region (default: DFW)',default="DFW")
+  parser.add_argument('--webhead_prefix', help='Webhead name prefix (default: challenge11_webhead)',default="challenge11_webhead")
+  parser.add_argument('--webhead_count', help='Number of webheads (default: 3)',default=3)
+  parser.add_argument('--webhead_init', help='Start httpd service on webhead (default: no)',default='no')
+  parser.add_argument('--lb_name', help='Load balancer name (default: challenge11_lb)',default='challenge11_lb')
+  parser.add_argument('--public_keyfile', help='ssh public key file')
+  parser.add_argument('--error_file', help='file containing error page content')
+  parser.add_argument('--webhead_network_label', help='Webhead Network Label(default: webheadnw)',default="webheadnw")
+  parser.add_argument('--webhead_network_cidr', help='Webhead Network Range(CIDR)(default: 192.168.33.0/24)',default="192.168.33.0/24")
+  parser.add_argument('--webhead_storage', help='Add webhead cloud block storage(default: yes)',default="yes")
+  parser.add_argument('--webhead_storage_size', help='Webhead cloud block storage size in GB (default: 100)',default=100, type=int)
+  parser.add_argument('--webhead_storage_type', help='Webhead cloud block storage type.  SATA or SSD (default: SATA)',default="SATA")
+  parser.add_argument('--fqdn', help='fully qualified domain name', required=True)
+  args = parser.parse_args()
+
+  # Check to make sure the block storage size and type are sane
+  if args.webhead_storage_size < 100 or args.webhead_storage_size > 1024:
+    print "Storage must be within the 100 to 1024 GB range"
+    sys.exit(1)
+  if not (args.webhead_storage_type == "SATA" or args.webhead_storage_type == "SSD"):
+    print "Storage type must be either SATA or SSD"
+    sys.exit(1)
+
+  # Server Data Dictionary
+  server_data = dict()
+
+  # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
+  cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
+  print "Setting authentication file to %s" % (cred_file)
+  pyrax.set_credential_file(cred_file)
+
+  # Instantiate a cloudservers object
+  print "Instantiating cloudservers object"
+  csobj = pyrax.cloudservers
+
+  # Instantiate a clouddns object
+  print "Instantiating cloud_dns object"
+  cdnsobj = pyrax.cloud_dns
+
+  # Get the flavor id
+  flavor_id = get_flavor_from_id_or_name(csobj, args.flavor)
+
+  # Get the image id
+  image_id = get_image_from_id_or_name(csobj, args.image)
+
+  # Lets check the domain existance for the fqdn before going on 
+  check_vip_dns(cdnsobj, args.fqdn)
+
+  
+  # Add given public key file for authentication if given
+  cs_files = {}
+  if args.public_keyfile:
+    cs_files = check_pub_key_file(args.public_keyfile)
+
+  # Create a webhead network for your nodes
+  cnwobj = pyrax.cloud_networks
+  network_id = create_webhead_network(cnwobj, args.webhead_network_label, args.webhead_network_cidr)
+
+  # Create the servers by server_count
+  for webhead_num in range(1,args.webhead_count+1):
+    webhead_name = "%s%d" % (args.webhead_prefix, webhead_num)
+    new_server = create_webhead(csobj, webhead_name, flavor_id, image_id, cs_files, network_id)
+    try:
+      new_server.adminPass
+    except AttributeError:
+      print "%s existed, so password can't be pulled" % (webhead_name)
+      server_data[webhead_name] = {'password':'not_available','ipaddr':'0','id': new_server.id}
+    else:
+      print new_server.adminPass
+      server_data[webhead_name] = {'password':new_server.adminPass,'ipaddr':'0','id':new_server.id}
+
+  # Call function to wait on ip addresses to be assigned and update server_data
+  updated_server_data = wait_and_update(csobj, server_data)
+
+
+  # Call function to create and attach cloud block storage for each node
+  if args.webhead_storage == "yes":
+
+    # Instantiate a clouddns object
+    print "Instantiating cloud_blockstorage object"
+    cbsobj = pyrax.cloud_blockstorage
+
+    create_and_attach_cbs_volumes(cbsobj, updated_server_data, args.webhead_storage_size, args.webhead_storage_type)
+
+
+  # stop here for now
+  print "slm"
+  sys.exit(1)
+
+  # Create a load balancer nodes
+  clbobj = pyrax.cloud_loadbalancers
+  new_nodes = create_lb_nodes(clbobj, csobj, updated_server_data)
+
+  # Create the load balancer
+  new_lb = create_lb(clbobj, new_nodes, args.lb_name)
+
+  # Wait for load balancer to finish
+  updated_lb = wait_for_lb(clbobj, new_lb)
+
+  # Create a DNS entry for the server
+  create_vip_dns(cdnsobj, args.fqdn, updated_lb.virtual_ips[0].address)
+
+  # Add a health monitor if needed
+  health_monitor = updated_lb.get_health_monitor()
+  if not health_monitor:
+    print "Health monitor doesn't exist. Creating basic one for httpd"
+    updated_lb.add_health_monitor(type="HTTP", delay=10, timeout=10, attemptsBeforeDeactivation=3, path="/", statusRegex="^[234][0-9][0-9]$", bodyRegex=".*")
+  else:
+    print "Health monitor exists. Skipping"
+
+  # Wait for load balancer to finish(getting immutable object errors without wait)
+  updated_lb = wait_for_lb(clbobj, new_lb)
+
+  # Set the custom content for the error page if specified
+  if args.error_file:
+    err_content = check_error_page_file(args.error_file)
+    epage = updated_lb.get_error_page()
+    if epage['errorpage']['content'] != err_content:
+      print "Adding custom error page content"
+      updated_lb.set_error_page(err_content)
+    else:
+      print "Custom error content already matches. Skipping setting custom error page"
+
+    # Instantiate a cloudfiles object
+    print "Instantiating cloudfiles object"
+    cfobj = pyrax.cloudfiles
+
+    # Save the error page to cloud files
+    save_error_page(cfobj, err_content)
+
+  # If specified activate httpd on webheads
+  if args.webhead_init != "no":
+    activate_webservice(updated_server_data)
+
+  # Print the server and lb data
+  print_server_data(updated_server_data, updated_lb, args.fqdn)
+
+
+
+
+# Called on execution. We are just going to call the main function from here.
+if __name__ == "__main__":
+  main()
+
