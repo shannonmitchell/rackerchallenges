@@ -177,5 +177,68 @@ or
 
 example: ./challenge10 --fqdn test4.linuxrackers.com --public_keyfile /root/.ssh/id_rsa.pub --error_file /tmp/error_file --webhead_init yes
 
-```
 
+
+
+
+
+# Challenge 11 creates 3 load balanced webheads with user supplied fqdn, ssl termination,
+# private network and cloud block storage. This is the same as challenge 10 with the
+# error page and ssh key made optional.  I added ssl key generation and ssl termination
+# on the load balancer.  I also increased the default webhead count to 3. The private
+# network was added as well as the cloud block storage.  The only required option is
+# fqdn
+#
+#./challenge11 -h
+#usage: challenge11 [-h] [--image IMAGE] [--flavor FLAVOR] [--region REGION]
+#                   [--webhead_prefix WEBHEAD_PREFIX]
+#                   [--webhead_count WEBHEAD_COUNT]
+#                   [--webhead_init WEBHEAD_INIT] [--lb_name LB_NAME]
+#                   [--public_keyfile PUBLIC_KEYFILE] [--error_file ERROR_FILE]
+#                   [--webhead_network_label WEBHEAD_NETWORK_LABEL]
+#                   [--webhead_network_cidr WEBHEAD_NETWORK_CIDR]
+#                   [--webhead_storage WEBHEAD_STORAGE]
+#                   [--webhead_storage_size WEBHEAD_STORAGE_SIZE]
+#                   [--webhead_storage_type WEBHEAD_STORAGE_TYPE] --fqdn FQDN
+#
+#Create 3 load balanced webheads with user supplied fqdn, ssl termination,
+#private network and cloud block storage
+#
+#optional arguments:
+#  -h, --help            show this help message and exit
+#  --image IMAGE         image id or name (default: CentOS 6.3)
+#  --flavor FLAVOR       flavor id or name (default: 512MB Standard Instance)
+#  --region REGION       Region (default: DFW)
+#  --webhead_prefix WEBHEAD_PREFIX
+#                        Webhead name prefix (default: challenge11_webhead)
+#  --webhead_count WEBHEAD_COUNT
+#                        Number of webheads (default: 3)
+#  --webhead_init WEBHEAD_INIT
+#                        Start httpd service on webhead (default: no)
+#  --lb_name LB_NAME     Load balancer name (default: challenge11_lb)
+#  --public_keyfile PUBLIC_KEYFILE
+#                        ssh public key file
+#  --error_file ERROR_FILE
+#                        file containing error page content
+#  --webhead_network_label WEBHEAD_NETWORK_LABEL
+#                        Webhead Network Label(default: webheadnw)
+#  --webhead_network_cidr WEBHEAD_NETWORK_CIDR
+#                        Webhead Network Range(CIDR)(default: 192.168.33.0/24)
+#  --webhead_storage WEBHEAD_STORAGE
+#                        Add webhead cloud block storage(default: yes)
+#  --webhead_storage_size WEBHEAD_STORAGE_SIZE
+#                        Webhead cloud block storage size in GB (default: 100)
+#  --webhead_storage_type WEBHEAD_STORAGE_TYPE
+#                        Webhead cloud block storage type. SATA or SSD
+#                        (default: SATA)
+#  --fqdn FQDN           fully qualified domain name
+
+
+
+example: ./challenge11 --fqdn challenge11.linuxrackers.com
+
+or 
+
+example(with pubkey and httpd setup for testing lb): ./challenge11 --fqdn challenge11.linuxrackers.com --public_keyfile /root/.ssh/id_rsa.pub --webhead_init yes)
+
+```

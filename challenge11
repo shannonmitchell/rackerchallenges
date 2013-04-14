@@ -5,9 +5,58 @@ import sys
 import time
 import pyrax
 import argparse
+import subprocess
 
 
 
+# Create the certificate with openssl
+def create_ssl_certificate(country, state, city, org, fqdn):
+
+  # set up the return var
+  ret = {}
+
+  # pass pass through an env var
+  os.environ['C11_PASS'] = "rackspace"
+
+
+  # create private key. Dump usless output from stderr to /dev/null.
+  print "Generating a private key"
+  FNULL = open('/dev/null', 'w')
+  private_key = subprocess.Popen(['/usr/bin/openssl', 'genrsa', '-passout','env:C11_PASS', '-des3', '2048'], stderr=FNULL, stdout=subprocess.PIPE).communicate()[0]
+  #print private_key
+
+
+  # set the subject for the csr
+  subj_text = "/C=" + country + "/ST=" + state + "/L=" + city + "/O=" + org + "/CN=" + fqdn
+
+  # create the csr. Use the private key variables. 
+  print "Generating a CSR with subject line: " + subj_text
+  certificate_request = subprocess.Popen(['/usr/bin/openssl', 'req', '-new', '-passout','env:C11_PASS', '-passin', 'env:C11_PASS', '-subj', subj_text, '-key', '/dev/stdin'], stdout=subprocess.PIPE, stdin=subprocess.PIPE).communicate(input=private_key)[0]
+  #print certificate_request
+
+
+  # remove the private key passphrase
+  print "Removing passphrase from private key"
+  new_private_key = subprocess.Popen(['/usr/bin/openssl', 'rsa', '-passin', 'env:C11_PASS', '-in', '/dev/stdin'], stderr=FNULL, stdout=subprocess.PIPE, stdin=subprocess.PIPE).communicate(input=private_key)[0]
+  print new_private_key 
+  ret["key"] = new_private_key
+
+
+  # sign the certificate. multiple inputs, so stdin isn't going to work. going to write
+  # to a temp file and remove until I come up with something better.
+  tmp_csr = open("/tmp/challenge11.csr", "w")
+  tmp_csr.write(certificate_request)
+  tmp_csr.close()
+  print "Generating a self-signed certificate"
+  certificate = subprocess.Popen(['/usr/bin/openssl', 'x509', '-req', '-days', '365', '-passin', 'env:C11_PASS', '-in', '/tmp/challenge11.csr', '-signkey', '/dev/stdin'], stderr=FNULL,stdout=subprocess.PIPE, stdin=subprocess.PIPE).communicate(input=certificate_request + new_private_key)[0]
+  os.remove('/tmp/challenge11.csr')
+  print certificate 
+  ret["cert"] = certificate
+
+  return ret
+
+
+# Create the webhead private network
 def create_webhead_network(cnwobj, label, cidr):
 
   # Get the network list
@@ -346,11 +395,13 @@ def print_server_data(final_server_data, lbobj, vip_fqdn):
     print "\t%-10s %s \n" % ('root pass:', server_info['password'])
 
   print "Load Balancer Name: %s" % (lbobj.name)
-  print "\tLoad Balancer port: %s" % (lbobj.port) 
+  print "\tLoad Balancer tcp port(443 for https): %s" % (lbobj.port) 
   print "\tLoad Balancer node count: %s" % (lbobj.nodeCount) 
   print "\tLoad Balancer protocol: %s" % (lbobj.protocol) 
   print "\tLoad Balancer public vip ip: %s" % (lbobj.virtual_ips[0].address) 
   print "\tLoad Balancer public vip fqdn: %s" % (vip_fqdn) 
+  print "\tURL: http://%s" % (vip_fqdn) 
+  print "\tSSL-URL: https://%s" % (vip_fqdn) 
 
 
 def activate_webservice(server_data):
@@ -368,7 +419,7 @@ def activate_webservice(server_data):
 def main():
 
   # Parse the command line arguments
-  parser = argparse.ArgumentParser(description="Create load balanced webheads withuser supplied fqdn and public key for ssh logins.", prog='challenge11')
+  parser = argparse.ArgumentParser(description="Create 3 load balanced webheads with user supplied fqdn, ssl termination, private network and cloud block storage", prog='challenge11')
   parser.add_argument('--image', help='image id or name (default: CentOS 6.3)', default='CentOS 6.3')
   parser.add_argument('--flavor', help='flavor id or name (default: 512MB Standard Instance)', default='512MB Standard Instance')
   parser.add_argument('--region', help='Region (default: DFW)',default="DFW")
@@ -456,10 +507,6 @@ def main():
     create_and_attach_cbs_volumes(cbsobj, updated_server_data, args.webhead_storage_size, args.webhead_storage_type)
 
 
-  # stop here for now
-  print "slm"
-  sys.exit(1)
-
   # Create a load balancer nodes
   clbobj = pyrax.cloud_loadbalancers
   new_nodes = create_lb_nodes(clbobj, csobj, updated_server_data)
@@ -483,6 +530,12 @@ def main():
 
   # Wait for load balancer to finish(getting immutable object errors without wait)
   updated_lb = wait_for_lb(clbobj, new_lb)
+
+  # Configure ssl termination 
+  cert_info = create_ssl_certificate("US", "Texas", "San Antonio", "Rackspace", args.fqdn)
+  print "Adding certificate and private key to the load balancer for ssl termination"
+  updated_lb.add_ssl_termination(securePort=443, enabled=True, secureTrafficOnly=False, certificate=cert_info['cert'], privatekey=cert_info['key'])
+
 
   # Set the custom content for the error page if specified
   if args.error_file:
