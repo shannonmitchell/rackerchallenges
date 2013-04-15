@@ -247,14 +247,14 @@ example(with pubkey and httpd setup for testing lb): ./challenge11 --fqdn challe
 
 
 # Challenge 12:  Script to create a mailgun route using the following info:
-#  priority = "1"
+#
+# priority = "1"
 # description = "racker challenge 12 mailgun route"
 # expression = 'match_recipient("shan5464@apichallenges.mailgun.org")'
 # actionone = 'forward("http://cldsrvr.com/challenge1")'
 # actiontwo = 'stop()'
-#
-#
-
 
 example: ./challenge12
+
+
 ```
