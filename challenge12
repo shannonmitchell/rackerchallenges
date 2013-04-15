@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+
+
+import os
+import sys
+import json
+import pycurl
+import cStringIO
+
+
+
+def main():
+
+  # Form Values
+  priority = "1"
+  description = "racker challenge 12 mailgun route"
+  expression = 'match_recipient("shan5464@apichallenges.mailgun.org")'
+  actionone = 'forward("http://cldsrvr.com/challenge1")'
+  actiontwo = 'stop()'
+
+  # API URL
+  apiurl="https://api.mailgun.net/v2"
+  print "Using mailgun api url of %s" % (apiurl)
+
+  # Get the mailgun api key
+  apiconffile = "%s/.mailgunapi"  % (os.environ['HOME'])
+  print "Pulling api key from %s" % (apiconffile)
+  apifile = open(apiconffile, "r")
+  apikey = apifile.readline()
+  apikey = apikey.strip()
+  apifile.close()
+
+  # Get existing routes with pycurl
+  curlobj = pycurl.Curl()
+  buf = cStringIO.StringIO()
+  curlobj.setopt(curlobj.WRITEFUNCTION, buf.write)
+  curlobj.setopt(curlobj.URL, apiurl + "/routes")
+  curlobj.setopt(pycurl.USERPWD, 'api:%s' % (apikey))
+  curlobj.perform()
+  list_response = json.loads(buf.getvalue())
+
+  # Loop through the list and and check for an existing entry. 
+  for item in list_response['items']:
+    if item['expression'] == expression and item['actions'][0] == actionone:
+      print "A route with expression (" + expression + ") and forward action (" + actionone + ") exists. skipping creation"
+      sys.exit(1)
+
+
+  # Create Route
+  route_data = "priority=%s&description=%s&expression=%s&action=%s&action=%s" % (priority,description,expression,actionone,actiontwo)
+  print "Creating mailgun route with the following post data: " + route_data
+  curlobj.setopt(curlobj.POSTFIELDS, route_data)
+  curlobj.perform()
+
+ 
+
+
+if __name__ == "__main__":
+  main()
