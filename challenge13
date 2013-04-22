@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+
+import os
+import time
+import pyrax
+
+
+def delete_all_load_balancers(clbobj):
+
+  print "Finding and deleting load balancers"
+  load_balancers = clbobj.list()
+  for load_balancer in load_balancers:
+    print "Deleting Load Balancer \"" + load_balancer.name + "\""
+    load_balancer.delete()
+
+  print "Waiting for all load balancers to be deleted"
+  while 1:
+    load_balancers = clbobj.list()
+    if load_balancers:
+      print "Load balancers still exist. Sleeping 20\n"
+      time.sleep(20)
+    else:
+      print "No more load balancers. Returning"
+      return 1
+
+
+
+
+def delete_all_cloud_files(cfobj):
+
+  print "Deleting all cloud files objects"
+  containers = cfobj.get_all_containers()
+
+  for container in containers:
+    for object in container.get_objects():
+      print "\tDeleting %s: %s" % ( container.name, object.name )
+      container.delete_object(object.name)
+    print "\tDeleting %s" % container.name
+    cfobj.delete_container(container.name)
+
+
+
+
+def main():
+
+  # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
+  cred_file = "%s/.rackspace_cloud_credentials"  % (os.environ['HOME'])
+  print "Setting authentication file to %s" % (cred_file)
+  pyrax.set_credential_file(cred_file)
+
+  # Instantiate a cloudload balancer object
+  print "Instantiating cloud_loadbalancers object"
+  clbobj = pyrax.cloud_loadbalancers
+
+  # Delete all of the load balancers
+  delete_all_load_balancers(clbobj)
+
+
+  # Instantiate a cloudfiles object
+  print "Instantiating cloudfiles object"
+  cfobj = pyrax.cloudfiles
+
+  # Delete all of the load balancers
+  delete_all_cloud_files(cfobj)
+
+
+
+if __name__ == "__main__":
+  main()
+

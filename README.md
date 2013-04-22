@@ -257,4 +257,7 @@ example(with pubkey and httpd setup for testing lb): ./challenge11 --fqdn challe
 example: ./challenge12
 
 
+
+# Challenge 13: Simple program to remove all cloud load balancers, servers, images, cloud files&objects, databases, networks and volumes  (Work In Progress)
+
 ```
