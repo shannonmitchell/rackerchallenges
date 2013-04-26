@@ -130,7 +130,22 @@ def delete_all_cloud_servers(csrvobj):
   for server in servers:
     if server.name != "wiki.linuxrackers.com":
       print "Deleting cloud server: " + server.name
+      server.delete()
+      
 
+  # wait for servers to be deleted
+  while 1:
+    complete = 1
+    servers = csrvobj.servers.list()
+    for server in servers:
+      if server.name != "wiki.linuxrackers.com":
+        complete = 0
+
+    if complete != 1:
+      print "Servers still exist.  Sleeping 20 seconds"
+      time.sleep(20)
+    else:
+      return
 
 
 

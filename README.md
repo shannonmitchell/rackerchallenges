@@ -258,6 +258,9 @@ example: ./challenge12
 
 
 
-# Challenge 13: Simple program to remove all cloud load balancers, servers, images, cloud files&objects, databases, networks and volumes  (Work In Progress)
+# Challenge 13: Simple program to remove all cloud load balancers, servers, images, cloud files&objects, databases, networks and volumes.
+
+example: ./challenge13
+
 
 ```
