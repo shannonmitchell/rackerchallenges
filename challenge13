@@ -41,6 +41,99 @@ def delete_all_cloud_files(cfobj):
 
 
 
+def delete_all_cloud_databases(cdbobj):
+
+  print "Deleting all cloud database instances"
+  instances = cdbobj.list()
+  for instance in instances:
+    print "\tDeleting instance %s\n" % (instance.name)
+    instance.delete()
+
+
+def delete_all_cloud_block_storage(cbsobj):
+
+  print "Deleting all cloud block storage"
+  volumes = cbsobj.list()
+
+  # detach all volumes first
+  for volume in volumes:
+    
+    print "\tDetaching volume %s\n" % (volume.name)
+    volume.detach()
+
+
+  # Loop through and wait for the storage to finish detaching
+  completed = 0
+  while 1:
+
+    # reset completed for the next round of checks
+    completed = 1
+
+    # Loop the volumes and check the status
+    for volume in volumes:
+      if volume.status == "available" or volume.status == "error":
+        print "\t Volume %s detached.  Deleting now." % (volume.name)
+        volume.delete()
+      else:
+        print "\t Volume %s is still in status %s." % (volume.name, volume.status)
+        completed = 0
+
+
+    # return if things are finished, else sleep until ready
+    if completed == 1:
+      print "All volumes detached and removed. Returning"
+      return
+    else:
+      print "Waiting for volumes to finish detaching. Sleeping 60 seconds."
+      time.sleep(30)
+
+
+
+def delete_all_cloud_networks(cnobj):
+
+  print "Deleting cloud networks"
+  networks = cnobj.list()
+
+  for network in networks:
+    if network.name != "public" and network.name != "private":
+      print "\tDeleting network %s\n" % (network.name)     
+      network.delete()
+        
+
+def delete_all_cloud_server_images(csrvobj): 
+
+  print "Deleting cloud server images"
+  images = csrvobj.images.list()
+  for image in images:
+    if image.metadata["image_type"] != "base":
+      print "Deleting image " + image.name
+      image.delete()
+
+  # wait for images to be deleted
+  while 1:
+    complete = 1
+    images = csrvobj.images.list()
+    for image in images:
+      if image.metadata["image_type"] != "base":
+        complete = 0
+    if complete != 1:
+      print "Images still exist.  Sleeping 20 seconds"
+      time.sleep(20)
+    else:
+      return
+
+
+def delete_all_cloud_servers(csrvobj):
+
+  print "Deleting cloud servers"
+  servers = csrvobj.servers.list()
+  for server in servers:
+    if server.name != "wiki.linuxrackers.com":
+      print "Deleting cloud server: " + server.name
+
+
+
+
 def main():
 
   # Authenticate using a credentials file: "~/.rackspace_cloud_credentials"
@@ -60,8 +153,43 @@ def main():
   print "Instantiating cloudfiles object"
   cfobj = pyrax.cloudfiles
 
-  # Delete all of the load balancers
+  # Empty out cloud files
   delete_all_cloud_files(cfobj)
+
+
+  # Instantiate a cloud database object
+  print "Instantiating cloud database object"
+  cdbobj = pyrax.cloud_databases
+
+  # Delete all databases
+  delete_all_cloud_databases(cdbobj)
+
+
+  # Instantiate a cloud block storage object
+  print "Instantiating cloud block storage object"
+  cbsobj = pyrax.cloud_blockstorage
+  
+  # Delete all cloud block storage
+  delete_all_cloud_block_storage(cbsobj)
+
+
+  # Instantiate a cloud servers object
+  print "Instantiating cloud servers object"
+  csrvobj = pyrax.cloudservers
+
+  # Delete all server images
+  delete_all_cloud_server_images(csrvobj)
+
+  # Delete all servers
+  delete_all_cloud_servers(csrvobj)
+
+
+  # Instantiate a cloud network object
+  print "Instantiating cloud network object"
+  cnobj = pyrax.cloud_networks
+
+  # Delete all custom cloud networks(run after server deletions)
+  delete_all_cloud_networks(cnobj)
 
 
 
